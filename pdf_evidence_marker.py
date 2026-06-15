@@ -51,6 +51,44 @@ def stamp_evidence_number(page, text, font_size, font_color,
     )
 
 
+def verify_stamp(page, stamp_text, font_size,
+                 right_margin: float = 25, top_margin: float = 14) -> bool:
+    """刻印後のページについて「表示上の右上」に証拠番号が実在するかを検証する。
+
+    旧実装は search_for による存在チェックのみだったため、
+    (a) 元PDFの本文に同一文字列（例：再処理時の既存刻印）があると
+        刻印失敗を見逃す偽陽性、
+    (b) 刻印は存在するが位置・向きがずれている不良（旧回転バグの類型）の
+        見逃し、の2つの穴があった。
+
+    本実装は stamp_evidence_number と同じ計算で「表示座標系での刻印予定
+    矩形」を求め、search_for の各ヒット（回転前座標）を page.rotation_matrix
+    で表示座標へ写像して、予定位置と重なるヒットが1つでもあれば合格とする。
+    これにより、
+    - 同番号の打ち直し（新旧刻印が完全に重なりヒットが増えないケース）は
+      「右上に番号が表示されている」事実をもって正しく合格し、
+    - 本文中の同一文字列だけでは合格せず、
+    - 位置ズレ刻印は不合格として検出できる。
+    マージン既定値は stamp_evidence_number と一致させること。
+    """
+    hits = page.search_for(stamp_text)
+    if not hits:
+        return False
+    tw = fitz.get_text_length(stamp_text, fontname="japan", fontsize=font_size)
+    # stamp_evidence_number と同一の計算による「表示上の刻印予定矩形」
+    # （±5pt の許容誤差を持たせる）
+    expected = fitz.Rect(
+        page.rect.width - right_margin - tw, top_margin,
+        page.rect.width - right_margin, top_margin + font_size
+    ) + (-5, -5, 5, 5)
+    for h in hits:
+        disp = h * page.rotation_matrix  # 回転前座標 → 表示座標
+        disp.normalize()
+        if expected.intersects(disp):
+            return True
+    return False
+
+
 class TextViewerDialog(QDialog):
     """テキスト全文表示用の子ダイアログ"""
 
@@ -208,6 +246,12 @@ class AboutDialog(QDialog):
         "  ・「枝番にする」ボタンをクリック\n"
         "  ・例：第2号証の後に枝番を設定すると、ファイル名は「甲002-1」「甲002-2」\n"
         "  ・解除する場合は「枝番を解除」ボタン\n\n"
+        "(3') 横向き資料の向き補正（必要な場合のみ）\n"
+        "  ・対象ファイルを選択し「↻ 右90°」ボタンをクリック\n"
+        "  ・押すたびに90度ずつ右回転（4回で元に戻ります）\n"
+        "  ・リスト上では「↻」マークで回転中のファイルが分かります\n"
+        "  ・回転は保存実行時にPDFへ反映されます（元ファイルは変更しません）\n"
+        "  ・1ファイル内で縦横が混在する場合は全ページに同じ回転がかかります\n\n"
         "(4) 証拠番号の設定\n"
         "  ・証拠種別：甲/乙/その他（カスタム文字列）\n"
         "  ・開始番号：通常は1から\n"
@@ -378,11 +422,17 @@ class PDFFileItem(QListWidgetItem):
         super().__init__()
         self.file_path = file_path
         self.is_branch = False  # 枝番フラグ
+        # 回転保留量（度・時計回り。0/90/180/270）。
+        # ボタンで積み増すだけの「保留状態」であり、元ファイルにも出力にも
+        # この時点では一切反映しない。実体化は execute_marking（保存実行）時に
+        # set_rotation で全ページへ一律に焼き込む。is_branch と同じモデル。
+        self.rotation = 0
         self.update_display()
 
     def update_display(self):
-        """表示テキストを更新"""
-        self.setText(self.file_path.name)
+        """表示テキストを更新（回転保留中は先頭に「↻」を付けて可視化する）"""
+        mark = "↻ " if self.rotation else ""
+        self.setText(f"{mark}{self.file_path.name}")
 
 
 class DraggableListWidget(QListWidget):
@@ -545,10 +595,19 @@ class EvidenceMarkerWindow(QMainWindow):
         self.unset_branch_btn = QPushButton("枝番\n解除")
         self.unset_branch_btn.clicked.connect(self.unset_branch)
 
+        self.rotate_btn = QPushButton("↻ 右90°")
+        self.rotate_btn.setToolTip(
+            "選択中（サムネイル表示中）のファイルを右に90度回転します。\n"
+            "押すたびに90度ずつ回り、4回で元に戻ります。\n"
+            "回転は保存実行時にPDFへ反映され、元ファイルは変更しません。"
+        )
+        self.rotate_btn.clicked.connect(self.rotate_selected)
+
         list_control_layout.addWidget(self.move_up_btn)
         list_control_layout.addWidget(self.move_down_btn)
         list_control_layout.addWidget(self.set_branch_btn)
         list_control_layout.addWidget(self.unset_branch_btn)
+        list_control_layout.addWidget(self.rotate_btn)
         list_control_layout.addStretch()
 
         list_layout.addLayout(list_control_layout)
@@ -910,6 +969,31 @@ class EvidenceMarkerWindow(QMainWindow):
 
         self.update_preview()
 
+    def rotate_selected(self):
+        """選択中のファイルを右に90度回転（保留）する。
+
+        一括回転は行わない。サムネイルは先頭の選択ファイル1件しか映らず、
+        複数同時回転は確認できないまま向きを変えてしまう事故につながるため、
+        対象はサムネイル表示中のファイル（selected_items[0]）に限定する。
+
+        ここで行うのは rotation の積み増し（+90、4回で一周＝取り消し経路を兼ねる）と
+        表示更新のみ。元ファイル・出力には触れず、実体化は execute_marking で行う。
+        """
+        selected_items = self.file_list.selectedItems()
+
+        if not selected_items:
+            QMessageBox.warning(self, "警告", "回転するファイルを選択してください")
+            return
+
+        # サムネイルに映っているファイル（先頭選択）だけを回す
+        item = selected_items[0]
+        if not isinstance(item, PDFFileItem):
+            return
+
+        item.rotation = (item.rotation + 90) % 360
+        item.update_display()          # リスト上の「↻」マーカーを更新
+        self.update_thumbnail_display()  # プレビューを回転後の向きで描き直す
+
     def get_prefix(self) -> str:
         """証拠種別のプレフィックスを取得"""
         if self.type_kou.isChecked():
@@ -1054,19 +1138,41 @@ class EvidenceMarkerWindow(QMainWindow):
             first_page = pdf_doc[0]
 
             # サムネイル生成（get_pixmapはページの /Rotate を反映してレンダリングする）
-            pix = first_page.get_pixmap(dpi=72)
-
-            # 表示領域に収まるようにスケーリング（72dpiのpixmapを基準に縮小）
+            # 表示枠（パネル）サイズ
             max_w, max_h = 250, 350
-            scale = min(max_w / pix.width, max_h / pix.height)
+
+            # 回転90/270では表示時に縦横が入れ替わるので、収め先の枠も入れ替えて
+            # 「回転前」の縮尺を決める。こうしてPDFから目標サイズで直接レンダリングし、
+            # 回転は90度単位の無損失変換（転置）で済ませる。一度大きく焼いてから
+            # ラスター縮小する経路を通らないため、どの向きでもぼやけない。
+            rot = selected_item.rotation
+            if rot in (90, 270):
+                fit_w, fit_h = max_h, max_w
+            else:
+                fit_w, fit_h = max_w, max_h
+
+            pix = first_page.get_pixmap(dpi=72)
+            scale = min(fit_w / pix.width, fit_h / pix.height)
             if scale < 1:
+                # PDFから縮小後の縮尺で直接レンダリング（ベクター→ラスター。鮮明）
                 pix = first_page.get_pixmap(matrix=fitz.Matrix(scale, scale))
+            # scale>=1（元が枠より小さいページ）は等倍のまま。拡大ボケを避ける。
 
             # QPixmapに変換
-            from PyQt6.QtGui import QImage, QPixmap
+            from PyQt6.QtGui import QImage, QPixmap, QTransform
             img = QImage(pix.samples, pix.width, pix.height, pix.stride,
                          QImage.Format.Format_RGB888).copy()
-            self.thumbnail_display.setPixmap(QPixmap.fromImage(img))
+            pixmap = QPixmap.fromImage(img)
+
+            # 回転保留量をプレビューに反映する。
+            # pix はファイル自身の /Rotate を既に反映済みなので、ここで重ねるのは
+            # ユーザーが押した分（保留中の補正）のみ。保存時の見え方と一致する。
+            # 90/180/270 の軸そろえ回転は FastTransformation（既定）なら画素単位で
+            # 無損失（転置）になるため、SmoothTransformation は指定しない。
+            if rot:
+                pixmap = pixmap.transformed(QTransform().rotate(rot))
+
+            self.thumbnail_display.setPixmap(pixmap)
 
         except Exception as e:
             self.thumbnail_display.setText(f"プレビュー\n読み込み失敗:\n{e}")
@@ -1157,6 +1263,14 @@ class EvidenceMarkerWindow(QMainWindow):
 
                 # withで開き、エラー時もファイルハンドルを確実に解放する
                 with fitz.open(str(item.file_path)) as pdf_doc:
+                    # 回転保留がある場合、刻印より先に全ページへ一律で焼き込む。
+                    # （横向き資料の向き補正。全ページ一律のため、1ファイル内に
+                    #   縦横が混在する証拠には使わない運用とする。）
+                    # 刻印ヘルパーは保存時の pdf_doc[0].rotation を読んで
+                    # 「表示上の右上」に正立配置するため、回転後でも番号位置は正しい。
+                    if item.rotation:
+                        for pg in pdf_doc:
+                            pg.set_rotation((pg.rotation + item.rotation) % 360)
                     if do_print:
                         # ページの向きは変えず、表示上の右上へ正立・横書きで刻印する。
                         # （裁判所の運用：横向きはそのままアップロード／番号は右上。
@@ -1171,17 +1285,22 @@ class EvidenceMarkerWindow(QMainWindow):
                     pdf_doc.save(str(output_file))
 
                 # 押印の実在チェック（印字ありの場合のみ）。
-                # 出力PDFを再オープンし、刻印した証拠番号テキストが実際に
-                # 検出できるかを確認する。検出できなければ不良出力を削除し、
-                # 当該ファイルをエラー扱いにして残りの処理は継続する。
-                # （回転メタデータの扱い等で「リネームは成功・刻印は不在」と
-                #   なる事故を実行時に必ず捕捉するための保険。）
+                # 出力PDFを再オープンし、刻印した証拠番号が「表示上の右上」
+                # （刻印予定位置）に実在するかを位置ベースで検証する。
+                # 検出できなければ不良出力を削除し、当該ファイルをエラー扱いに
+                # して残りの処理は継続する。
+                # 単純な存在チェックではなく位置検証である理由：
+                # ・番号を打ち直したいユーザーが、既に番号付きのファイルを
+                #   再度読み込むのは自然な操作であり、本文・既存刻印に同一
+                #   文字列があっても誤判定しないため
+                # ・位置・向きがずれた刻印（回転メタデータ起因の不良）も
+                #   実行時に必ず捕捉するため
                 if do_print:
                     with fitz.open(str(output_file)) as verify_doc:
-                        if not verify_doc[0].search_for(stamp_text):
+                        if not verify_stamp(verify_doc[0], stamp_text, font_size):
                             raise RuntimeError(
                                 f"刻印した証拠番号「{stamp_text}」が"
-                                f"出力PDFから検出できませんでした"
+                                f"出力PDFの右上から検出できませんでした"
                                 f"（押印に失敗した可能性があります）"
                             )
 
