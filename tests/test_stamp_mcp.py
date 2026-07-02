@@ -105,6 +105,38 @@ def test_auto_executes_when_no_warnings(split_like_dir):
     assert res["warnings"] == []
 
 
+# ---- MCP境界の安全性（引数サニタイズ＋出力先の封じ込め）----
+
+def test_prefix_fallback_rejects_path_like_values(split_like_dir):
+    # prefix_fallback は出力名に入るため、パス風・自由文字列は入口で拒否する
+    for bad in ("../../evil/x", "..\\..\\x", "甲/", "note", ""):
+        res = M.stamp_execute(str(split_like_dir), prefix_fallback=bad, dry_run=True)
+        assert "error" in res, bad
+
+
+def test_prefix_fallback_accepts_fullwidth_and_lowercase(split_like_dir):
+    # 全角・小文字の記号（乙ａ）は正規化して受理（乙A001.pdf になる）
+    res = M.stamp_execute(str(split_like_dir), prefix_fallback="乙ａ", dry_run=True)
+    assert "error" not in res
+    assert res["plan"][0]["out_name"].startswith("乙A")
+
+
+def test_output_containment_guard_blocks_escape(split_like_dir, monkeypatch):
+    # 万一 out_name にパス区切りが混入しても、出力フォルダ外には書かない（最終ガード）
+    crafted = {"plan": [{
+        "src_name": "結合スキャン_001.pdf",
+        "src_path": str(split_like_dir / "結合スキャン_001.pdf"),
+        "evidence_number": "甲001", "out_name": "../escape.pdf",
+        "source": "explicit", "rotate": 0,
+    }], "counts": {}, "warnings": []}
+    monkeypatch.setattr(M.st, "plan_stamps", lambda *a, **k: crafted)
+    res = M.stamp_execute(str(split_like_dir))
+    assert res["executed"] is True
+    assert res["succeeded"] == 0
+    assert res["failed"] and "拒否" in res["failed"][0]["error"]
+    assert not (split_like_dir.parent / "escape.pdf").exists()
+
+
 # ---- 刻印→検証の往復（/Rotate 付きページ含む）。force=True で warnings があっても実行 ----
 
 def test_execute_stamps_and_verifies(stamp_dir):

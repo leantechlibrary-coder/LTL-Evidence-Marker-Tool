@@ -18,6 +18,7 @@ rotations。GUI側の対話採番（ドラッグ順・甲乙選択・枝番ト�
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 
 import stamp_core as st
@@ -35,6 +36,10 @@ _INSTRUCTIONS = (
 mcp = FastMCP("ltl-stamp", instructions=_INSTRUCTIONS)
 
 _FONT_COLORS = {"赤": (1, 0, 0), "黒": (0, 0, 0), "青": (0, 0, 1)}
+
+# prefix_fallback はそのまま出力ファイル名に入るため、号証種別＋当事者記号のみ許可する
+#（自由文字列を通すと「../」等で出力フォルダ外への書き込みを指示できてしまう）。
+_PREFIX_RE = re.compile(r"^[甲乙丙丁][A-Z]?$")
 
 
 # LLMが崩しがちなパス表記の吸収用（全角スラッシュ→半角。ドライブ文字脱落は復元不可）
@@ -91,7 +96,11 @@ def stamp_execute(folder: str, style: str = "num3",
     d, err = _check_dir(folder)
     if err:
         return {"error": err}
-    plan = st.plan_stamps(d, style, prefix_fallback, start_fallback, rotations, numbers)
+    # 全角ゆらぎ（甲Ａ等）を吸収してから種別＋記号の形だけ許可（出力名に入るため）
+    pf = str(prefix_fallback).translate(st._FW_ALNUM).strip().upper()
+    if not _PREFIX_RE.match(pf):
+        return {"error": f"prefix_fallback が不正です（甲/乙/丙/丁＋任意の英字1文字のみ）: {prefix_fallback}"}
+    plan = st.plan_stamps(d, style, pf, start_fallback, rotations, numbers)
     if not plan["plan"]:
         return {"error": f"PDFがありません: {d}", "warnings": plan["warnings"]}
 
@@ -112,6 +121,11 @@ def stamp_execute(folder: str, style: str = "num3",
     for e in plan["plan"]:
         dst = out_dir / e["out_name"]
         try:
+            # 最終ガード：出力は必ず out_dir 直下（out_name にパス区切りが混入しても外へ書かない）
+            if dst.resolve().parent != out_dir.resolve():
+                failed.append({"src": e["src_name"],
+                               "error": f"出力先がフォルダ外を指すため拒否: {e['out_name']}"})
+                continue
             st.stamp_one(e["src_path"], str(dst), e["evidence_number"],
                          font_size, color, e["rotate"], do_print)
             files.append(e["out_name"])
