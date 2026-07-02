@@ -11,82 +11,10 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QFont
 from typing import List, Tuple
-
-
-def stamp_evidence_number(page, text, font_size, font_color,
-                          right_margin: float = 25, top_margin: float = 14):
-    """証拠番号をページ「表示上」の右上に、正立・横書きで刻印する。
-
-    PyMuPDFの insert_text は、座標点を「回転前(mediabox)座標系」で解釈し、
-    rotate 引数はその座標系に対する文字の向きを指定する。そのため、
-    /Rotate（回転属性）を持つページ（横長mediabox + /Rotate 270 で縦に
-    立てたスキャナPDF等）に対して「表示上の右上」の座標をそのまま渡すと、
-    位置も向きもずれてしまう。
-
-    そこで、まず表示座標系で目標点（右上のベースライン左端）を求め、
-    page.derotation_matrix で回転前座標へ変換した点を挿入位置とし、
-    rotate=page.rotation を与えて表示上で正立させる。こうすれば
-    /Rotate 0/90/180/270 のいずれでも一貫して「表示上の右上」に
-    横書きで刻印できる。
-
-    挿入点は文字のベースライン左端であり、フォントが大きいほど文字は
-    ベースラインから上へ伸びる。そのためベースライン y はフォントサイズに
-    応じて下げ、上端での見切れを防ぐ（top_margin=14・font_size=16 のとき
-    ベースライン y は従来どおり 30 になる）。
-    """
-    tw = fitz.get_text_length(text, fontname="japan", fontsize=font_size)
-    # ベースライン y はフォントサイズに連動させ、大きい文字でも上端で切れないようにする
-    baseline_y = top_margin + font_size
-    # 表示座標系での目標点（右上）
-    disp_point = fitz.Point(page.rect.width - right_margin - tw, baseline_y)
-    # 表示座標 → 回転前（mediabox）座標へ変換
-    insert_point = disp_point * page.derotation_matrix
-    page.insert_text(
-        insert_point,
-        text,
-        fontsize=font_size,
-        color=font_color,
-        fontname="japan",
-        rotate=page.rotation,
-    )
-
-
-def verify_stamp(page, stamp_text, font_size,
-                 right_margin: float = 25, top_margin: float = 14) -> bool:
-    """刻印後のページについて「表示上の右上」に証拠番号が実在するかを検証する。
-
-    旧実装は search_for による存在チェックのみだったため、
-    (a) 元PDFの本文に同一文字列（例：再処理時の既存刻印）があると
-        刻印失敗を見逃す偽陽性、
-    (b) 刻印は存在するが位置・向きがずれている不良（旧回転バグの類型）の
-        見逃し、の2つの穴があった。
-
-    本実装は stamp_evidence_number と同じ計算で「表示座標系での刻印予定
-    矩形」を求め、search_for の各ヒット（回転前座標）を page.rotation_matrix
-    で表示座標へ写像して、予定位置と重なるヒットが1つでもあれば合格とする。
-    これにより、
-    - 同番号の打ち直し（新旧刻印が完全に重なりヒットが増えないケース）は
-      「右上に番号が表示されている」事実をもって正しく合格し、
-    - 本文中の同一文字列だけでは合格せず、
-    - 位置ズレ刻印は不合格として検出できる。
-    マージン既定値は stamp_evidence_number と一致させること。
-    """
-    hits = page.search_for(stamp_text)
-    if not hits:
-        return False
-    tw = fitz.get_text_length(stamp_text, fontname="japan", fontsize=font_size)
-    # stamp_evidence_number と同一の計算による「表示上の刻印予定矩形」
-    # （±5pt の許容誤差を持たせる）
-    expected = fitz.Rect(
-        page.rect.width - right_margin - tw, top_margin,
-        page.rect.width - right_margin, top_margin + font_size
-    ) + (-5, -5, 5, 5)
-    for h in hits:
-        disp = h * page.rotation_matrix  # 回転前座標 → 表示座標
-        disp.normalize()
-        if expected.intersects(disp):
-            return True
-    return False
+from stamp_core import (
+    stamp_evidence_number, verify_stamp,
+    format_stamp_text, make_filename as core_make_filename,
+)
 
 
 class TextViewerDialog(QDialog):
@@ -1018,13 +946,10 @@ class EvidenceMarkerWindow(QMainWindow):
         branch=0 は枝番なし。
         - style="num3"（甲001）：主番号は「甲001」、枝番は「甲001-2」（mints表記）
         - style="gou"（甲第1号証）：主番号は「甲第1号証」、枝番は「甲第1号証の2」
+
+        書式ロジックは stamp_core に集約（GUIとMCPで1コピー）。出力は不変。
         """
-        if style == "num3":
-            base = f"{prefix}{main:03d}"
-            return f"{base}-{branch}" if branch else base
-        else:  # "gou"
-            base = f"{prefix}第{main}号証"
-            return f"{base}の{branch}" if branch else base
+        return format_stamp_text(prefix, main, branch, style)
 
     def make_filename(self, prefix: str, main: int, branch: int) -> str:
         """出力ファイル名を生成（mints命名規則準拠・印字書式に依存しない）
@@ -1035,10 +960,10 @@ class EvidenceMarkerWindow(QMainWindow):
         いずれも甲001形式で統一されるため）。
 
         例：(主1, 枝0)→「甲001.pdf」、(主1, 枝2)→「甲001-2.pdf」
+
+        命名ロジックは stamp_core に集約（GUIとMCPで1コピー）。出力は不変。
         """
-        base = f"{prefix}{main:03d}"
-        stem = f"{base}-{branch}" if branch else base
-        return f"{stem}.pdf"
+        return core_make_filename(prefix, main, branch)
 
     def generate_evidence_numbers(self) -> List[Tuple[PDFFileItem, int, int]]:
         """証拠番号を生成し、(アイテム, 主番号, 枝番) のタプル列を返す。

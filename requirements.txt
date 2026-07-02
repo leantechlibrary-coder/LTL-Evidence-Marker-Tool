@@ -1,0 +1,7 @@
+# 実行時依存
+PyMuPDF>=1.24.0      # AGPL v3
+PyQt6>=6.5.0         # GPL v3（GUIモードのみ。--mcp では読み込まない）
+mcp>=1.2.0           # MIT（MCPモード）
+
+# 開発・テスト
+# pytest>=7.0
