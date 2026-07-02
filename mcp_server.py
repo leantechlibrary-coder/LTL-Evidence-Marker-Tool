@@ -37,9 +37,25 @@ mcp = FastMCP("ltl-stamp", instructions=_INSTRUCTIONS)
 
 _FONT_COLORS = {"赤": (1, 0, 0), "黒": (0, 0, 0), "青": (0, 0, 1)}
 
-# prefix_fallback はそのまま出力ファイル名に入るため、号証種別＋当事者記号のみ許可する
-#（自由文字列を通すと「../」等で出力フォルダ外への書き込みを指示できてしまう）。
-_PREFIX_RE = re.compile(r"^[甲乙丙丁][A-Z]?$")
+# prefix_fallback はそのまま出力ファイル名・刻印文字列に入る。
+# 疎明資料（疎甲/疎/資料 等）や GUI の custom_prefix と同じ自由度を保ちつつ、
+# パストラバーサル・不正ファイル名だけを入口で弾く：
+#   - Windowsファイル名禁止文字（\/:*?"<>|）・制御文字 → 拒否
+#   - ドット → 拒否（「..」による親フォルダ参照・拡張子偽装の芽を断つ）
+#   - 空・10文字超 → 拒否（号証プレフィックスとして非現実的）
+_PREFIX_BAD_CHARS = set('\\/:*?"<>|.')
+_KOSHO_PREFIX_RE = re.compile(r"^[甲乙丙丁][A-Za-z]?$")
+
+
+def _validate_prefix(prefix: str) -> str | None:
+    """prefix_fallback を正規化して返す。不正なら None。
+    甲乙丙丁＋英字の正規形（乙ａ→乙A）は大文字化、それ以外（疎甲/資料等）はそのまま。"""
+    pf = str(prefix).translate(st._FW_ALNUM).strip()
+    if not pf or len(pf) > 10:
+        return None
+    if any(c in _PREFIX_BAD_CHARS or ord(c) < 0x20 or c == "\x7f" for c in pf):
+        return None
+    return pf.upper() if _KOSHO_PREFIX_RE.match(pf) else pf
 
 
 # LLMが崩しがちなパス表記の吸収用（全角スラッシュ→半角。ドライブ文字脱落は復元不可）
@@ -96,10 +112,11 @@ def stamp_execute(folder: str, style: str = "num3",
     d, err = _check_dir(folder)
     if err:
         return {"error": err}
-    # 全角ゆらぎ（甲Ａ等）を吸収してから種別＋記号の形だけ許可（出力名に入るため）
-    pf = str(prefix_fallback).translate(st._FW_ALNUM).strip().upper()
-    if not _PREFIX_RE.match(pf):
-        return {"error": f"prefix_fallback が不正です（甲/乙/丙/丁＋任意の英字1文字のみ）: {prefix_fallback}"}
+    # 出力名・刻印文字列に入るため、危険文字だけ入口で拒否（疎甲/疎/資料 等は通す）
+    pf = _validate_prefix(prefix_fallback)
+    if pf is None:
+        return {"error": "prefix_fallback が不正です（パス区切り・記号・制御文字・ドットは不可、"
+                         f"10文字以内）: {prefix_fallback}"}
     plan = st.plan_stamps(d, style, pf, start_fallback, rotations, numbers)
     if not plan["plan"]:
         return {"error": f"PDFがありません: {d}", "warnings": plan["warnings"]}

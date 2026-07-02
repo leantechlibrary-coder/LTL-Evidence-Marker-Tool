@@ -107,15 +107,21 @@ def test_auto_executes_when_no_warnings(split_like_dir):
 
 # ---- MCP境界の安全性（引数サニタイズ＋出力先の封じ込め）----
 
-def test_prefix_fallback_rejects_path_like_values(split_like_dir):
-    # prefix_fallback は出力名に入るため、パス風・自由文字列は入口で拒否する
-    for bad in ("../../evil/x", "..\\..\\x", "甲/", "note", ""):
+def test_prefix_fallback_rejects_dangerous_values(split_like_dir):
+    # prefix_fallback は出力名に入るため、パス区切り・ドット・制御文字・空・過長は入口で拒否
+    for bad in ("../../evil/x", "..\\..\\x", "甲/", "甲:", "疎.甲", "..", "", "疎" * 11, "甲\x00"):
         res = M.stamp_execute(str(split_like_dir), prefix_fallback=bad, dry_run=True)
         assert "error" in res, bad
 
 
-def test_prefix_fallback_accepts_fullwidth_and_lowercase(split_like_dir):
-    # 全角・小文字の記号（乙ａ）は正規化して受理（乙A001.pdf になる）
+def test_prefix_fallback_accepts_somei_and_custom(split_like_dir):
+    # 疎明資料等の実務プレフィックス（疎甲/疎/資料）はGUIのcustom_prefixと同様に通す
+    for pf, head in (("疎甲", "疎甲001"), ("疎", "疎001"), ("資料", "資料001"), ("証", "証001")):
+        res = M.stamp_execute(str(split_like_dir), prefix_fallback=pf, dry_run=True)
+        assert "error" not in res, pf
+        assert res["plan"][0]["out_name"].startswith(head)
+        assert res["plan"][0]["evidence_number"].startswith(head)  # 刻印文字列も同形
+    # 全角・小文字の当事者記号（乙ａ）は正規化して受理（乙A001.pdf になる）
     res = M.stamp_execute(str(split_like_dir), prefix_fallback="乙ａ", dry_run=True)
     assert "error" not in res
     assert res["plan"][0]["out_name"].startswith("乙A")
