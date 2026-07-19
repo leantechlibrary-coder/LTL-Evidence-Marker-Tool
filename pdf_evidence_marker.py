@@ -12,7 +12,7 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QFont
 from typing import List, Tuple
 from stamp_core import (
-    stamp_evidence_number, verify_stamp,
+    stamp_evidence_number, verify_stamp, subset_embedded_fonts,
     format_stamp_text, make_filename as core_make_filename,
 )
 
@@ -246,6 +246,29 @@ class AboutDialog(QDialog):
         "Copyright: Python Software Foundation\n"
         "Website: https://www.python.org/\n\n"
         "ライセンス全文：https://docs.python.org/3/license.html\n\n\n"
+        "================================================================================\n"
+        "4. LTL Evidence Sans（刻印用フォント）\n"
+        "================================================================================\n\n"
+        "License: SIL Open Font License, Version 1.1 (OFL-1.1)\n"
+        "Copyright: © 2014-2021 Adobe (http://www.adobe.com/),\n"
+        "           with Reserved Font Name 'Source'.\n"
+        "           Noto is a trademark of Google Inc.\n\n"
+        "本フォントは Noto Sans CJK JP を証拠番号刻印用の145グリフに\n"
+        "サブセットし、TrueTypeアウトラインへ変換のうえ\n"
+        "「LTL Evidence Sans」に改名した派生フォントです\n"
+        "（OFLのReserved Font Name条項に基づく改名）。\n"
+        "刻印時に出力PDFへサブセット埋め込みされます。\n\n"
+        "ライセンス全文：同梱の fonts/OFL.txt および\n"
+        "https://scripts.sil.org/OFL\n\n\n"
+        "================================================================================\n"
+        "5. fontTools\n"
+        "================================================================================\n\n"
+        "License: MIT License\n"
+        "Copyright: 2017 Just van Rossum and others\n"
+        "Website: https://github.com/fonttools/fonttools\n\n"
+        "埋め込みフォントのサブセット化に使用しています。\n\n"
+        "ライセンス全文：\n"
+        "https://github.com/fonttools/fonttools/blob/main/LICENSE\n\n\n"
         "================================================================================\n"
         "本ソフトウェアのライセンス\n"
         "================================================================================\n\n"
@@ -1207,6 +1230,9 @@ class EvidenceMarkerWindow(QMainWindow):
                             font_size,
                             font_color,
                         )
+                        # 埋め込みフォント（LTL Evidence Sans）を実使用グリフのみへ
+                        # 再サブセットし、出力サイズの増分を数KBに抑える
+                        subset_embedded_fonts(pdf_doc)
                     pdf_doc.save(str(output_file))
 
                 # 押印の実在チェック（印字ありの場合のみ）。

@@ -30,6 +30,10 @@ Remove-Item $Stage -Recurse -Force -ErrorAction SilentlyContinue
 Copy-Item (Join-Path $Root "dist\$App") $Stage -Recurse
 Copy-Item (Join-Path $Pkg "AppxManifest.xml") (Join-Path $Stage "AppxManifest.xml")
 Copy-Item (Join-Path $Pkg "Assets") (Join-Path $Stage "Assets") -Recurse
+# 刻印用フォント（LTL Evidence Sans + OFL.txt）。exe と同階層の fonts\ に置く
+# （stamp_core._find_font_file の探索順1）。MCP同梱パッケージ（ltl-evidence-mcp）
+# にはフォントを同梱しない＝そちらは内蔵 "japan" へ自動フォールバックする。
+Copy-Item (Join-Path $Root "fonts") (Join-Path $Stage "fonts") -Recurse
 
 # 3) パッケージ化
 New-Item -ItemType Directory -Force -Path $Out | Out-Null

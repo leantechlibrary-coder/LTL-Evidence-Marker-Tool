@@ -62,6 +62,44 @@ https://docs.python.org/3/license.html
 
 
 ================================================================================
+4. LTL Evidence Sans（刻印用フォント）
+================================================================================
+
+License: SIL Open Font License, Version 1.1 (OFL-1.1)
+Copyright: © 2014-2021 Adobe (http://www.adobe.com/), with Reserved
+           Font Name 'Source'. Noto is a trademark of Google Inc.
+
+本フォントは Noto Sans CJK JP を証拠番号刻印用の145グリフ（甲〜癸、
+検/疎/参/考/資/料/物/件、第/号/証/の、漢数字、ASCII・全角英数等）に
+サブセットし、CFFアウトラインをTrueTypeへ変換のうえ、OFLの
+Reserved Font Name 条項に基づき「LTL Evidence Sans」へ改名した
+派生フォントです。証拠番号の刻印時に出力PDFへサブセット埋め込みされます。
+
+OFL-1.1 の主な条件：
+- フォント単体での販売禁止（ソフトウェアへの同梱・販売は可）
+- 各コピーに著作権表示と本ライセンスを含めること
+- Reserved Font Name（Noto / Source）を派生フォント名に使わないこと
+- フォント自体はOFLのまま配布（フォントで作成した文書には適用されない）
+
+ライセンス全文および原著作権表示：同梱の fonts/OFL.txt
+参考：https://scripts.sil.org/OFL
+
+
+================================================================================
+5. fontTools
+================================================================================
+
+License: MIT License
+Copyright: 2017 Just van Rossum and others
+Website: https://github.com/fonttools/fonttools
+
+埋め込みフォントを実使用グリフのみへサブセット化するために使用しています。
+
+ライセンス全文：
+https://github.com/fonttools/fonttools/blob/main/LICENSE
+
+
+================================================================================
 本ソフトウェアのライセンス
 ================================================================================
 

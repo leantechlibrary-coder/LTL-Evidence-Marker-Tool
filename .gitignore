@@ -205,3 +205,8 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# ローカル専用（リポジトリに含めない）
+かんたん起動.bat
+はじめにお読みください.txt
+.claude/

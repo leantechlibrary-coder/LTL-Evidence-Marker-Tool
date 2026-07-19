@@ -68,3 +68,7 @@ App Execution Alias は MSIX の機能だが、**エージェントを動かす�
 - DisplayName/Description：証拠ファイル名変換ツール 用に
 - Identity `Name`：rename 用の予約名
 - `build.ps1` の `$App = "ltl-rename"`
+
+## 刻印フォントの同梱
+
+`build.ps1` がリポジトリ直下の `fonts/`（LTL Evidence Sans + OFL.txt）を stage の exe と同階層へコピーする。`stamp_core._find_font_file()` はフリーズ後 exe 隣の `fonts\` を最優先で探すため、`--add-data` は不要。**MCP同梱パッケージ（ltl-evidence-mcp）にはフォントを入れない**——stamp_core はフォント不在時に内蔵 "japan" へ自動フォールバックする設計なので、そのままで従来動作になる。
