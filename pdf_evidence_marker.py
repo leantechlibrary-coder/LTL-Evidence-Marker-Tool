@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import (
     QLineEdit, QRadioButton, QButtonGroup, QSpinBox, QComboBox,
     QGroupBox, QListWidgetItem, QAbstractItemView, QDialog, QTextEdit
 )
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal, QItemSelectionModel
 from PyQt6.QtGui import QColor, QFont
 from typing import List, Tuple
 from stamp_core import (
@@ -395,6 +395,13 @@ class DraggableListWidget(QListWidget):
     takeItem/insertItemで物理的に移動させる（オブジェクトの同一性を保つ）。
     並び替え完了は reordered シグナルで通知する（takeItem/insertItemは
     rowsMovedを発火しないため）。
+
+    重要: ドロップ受理時のアクションは必ず IgnoreAction にする。
+    MoveAction のまま受理すると、ドラッグ元である QAbstractItemView.startDrag()
+    が drag.exec() の戻り値を MoveAction と判断し、「移動済みの行を元から削除する」
+    後始末（clearOrRemove）を実行してしまう。本クラスは dropEvent 内で既に
+    takeItem/insertItem による移動を完了させているため、この後始末が走ると
+    移動したばかりのアイテム（＝選択中の行）がリストから消える。
     """
     reordered = pyqtSignal()
 
@@ -416,9 +423,15 @@ class DraggableListWidget(QListWidget):
             event.ignore()
             return
 
-        # ドロップ先の行を決定（アイテムの上に落ちたらその行、空白なら末尾）
+        # ドロップ先の行を決定。ドロップインジケータの位置（アイテムの上半分／
+        # 下半分／空白）を見て、見た目の挿入線と実際の挿入位置を一致させる。
         drop_item = self.itemAt(event.position().toPoint())
-        drop_row = self.row(drop_item) if drop_item is not None else self.count()
+        if drop_item is None:
+            drop_row = self.count()
+        else:
+            drop_row = self.row(drop_item)
+            if self.dropIndicatorPosition() == QAbstractItemView.DropIndicatorPosition.BelowItem:
+                drop_row += 1
 
         # 取り出す行（昇順）。取り出しで生じるドロップ位置のズレを補正するため、
         # drop_rowより前にある選択行の数だけ挿入位置を前へずらす。
@@ -434,12 +447,17 @@ class DraggableListWidget(QListWidget):
         for i, it in enumerate(taken):
             self.insertItem(target_row + i, it)
 
-        # 選択状態を復元
+        # 選択状態と現在行を復元
         self.clearSelection()
         for it in taken:
             it.setSelected(True)
+        if taken:
+            self.setCurrentItem(taken[0], QItemSelectionModel.SelectionFlag.NoUpdate)
 
-        event.acceptProposedAction()
+        # MoveAction で受理すると startDrag() の後始末で移動済みの行が削除される。
+        # 移動は本メソッド内で完了済みなので IgnoreAction を明示して受理する。
+        event.setDropAction(Qt.DropAction.IgnoreAction)
+        event.accept()
         self.reordered.emit()
 
 
