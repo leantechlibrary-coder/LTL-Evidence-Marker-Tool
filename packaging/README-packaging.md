@@ -26,7 +26,8 @@
 ## クラウド（GitHub Actions）でビルドする
 
 Windows PC が無くても、`.github/workflows/windows-build.yml` が GitHub 上の Windows 環境で
-上記の `build.ps1` を実行する。流れ：テスト（pytest）→ exe 化 → MSIX 化。
+上記の `build.ps1` を実行する。流れ：テスト（pytest。MCP のテストも含む）→ exe 化 → MSIX 化。
+exe / MSIX を作るジョブには `mcp` を入れないので、成果物は GUI 専用になる。
 
 - **自動で動くとき**：PR 作成時／`main` への push 時（コード・依存・packaging に変更があるとき）
 - **手動で動かす**：GitHub の Actions タブ →「windows-build」→「Run workflow」
@@ -36,6 +37,22 @@ Windows PC が無くても、`.github/workflows/windows-build.yml` が GitHub �
 - **リリース**：`v1.0.0` のようなタグを push すると、成果物を添付したリリースの**下書き**ができる（公開は手動）
 - **署名（任意）**：リポジトリの Settings → Secrets に `LTL_PFX_BASE64`（.pfx を Base64 化した文字列）と
   `LTL_PFX_PASSWORD` を登録すると、ローカル検証用に署名した MSIX を作る。未登録なら未署名。
+
+## MCP サーバ（Store 版には含めない）
+
+`mcp_server.py` はリポジトリに残すが、**Microsoft Store 版（exe / MSIX）には入れない**。
+刻印ロジック（`stamp_core.py`）は GUI と共有し、入口だけを分けている。
+
+- 起動：`pip install -r requirements-mcp.txt` → `python mcp_server.py`（stdio）
+- クライアント設定例：
+  ```json
+  { "mcpServers": { "ltl-stamp": { "command": "python", "args": ["C:\\path\\to\\mcp_server.py"] } } }
+  ```
+- Store 版に入らないことの歯止め（3重）：
+  1. `entry.py` は MCP を import しない（`tests/test_store_build_has_no_mcp.py` が検査）
+  2. `build.ps1` が PyInstaller に `--exclude-module mcp --exclude-module mcp_server` を渡す
+  3. `build.ps1` がビルド後、同梱モジュール一覧に MCP が無いことを確認（あればビルド失敗）
+- マニフェストに実行エイリアス（`appExecutionAlias`）は付けない（同じテストが検査）
 
 ## rename アプリ（証拠ファイル名変換ツール）での差分
 

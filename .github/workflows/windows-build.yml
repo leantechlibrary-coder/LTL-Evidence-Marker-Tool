@@ -1,4 +1,7 @@
 # Windows ビルド: テスト → exe 化（PyInstaller）→ MSIX 化 を GitHub 上で行う
+# ビルドするのは Microsoft Store 版（GUI 専用）。MCP は含めない:
+#   - test ジョブ : MCP を含む全テストを実行（requirements-mcp.txt も入れる）
+#   - build ジョブ: mcp を入れていない環境で exe / MSIX を作る
 # 成果物（exe 一式の zip と .msix）は実行結果ページの「Artifacts」からダウンロードできる。
 # v で始まるタグ（例: v1.0.0）を push すると、成果物を添付したリリースの下書きも作る。
 name: windows-build
@@ -9,7 +12,7 @@ on:
     tags: ["v*"]
     paths:
       - "*.py"
-      - "requirements.txt"
+      - "requirements*.txt"
       - "fonts/**"
       - "packaging/**"
       - "tests/**"
@@ -17,7 +20,7 @@ on:
   pull_request:
     paths:
       - "*.py"
-      - "requirements.txt"
+      - "requirements*.txt"
       - "fonts/**"
       - "packaging/**"
       - "tests/**"
@@ -32,7 +35,28 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  test:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies (GUI + MCP + pytest)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-mcp.txt pytest
+
+      # -rs: スキップされたテストがあれば理由を表示（MCP テストが黙って飛ばされないように）
+      - name: Run tests
+        run: python -m pytest -q -rs
+
   build:
+    needs: test
     runs-on: windows-latest
     timeout-minutes: 30
     env:
@@ -50,13 +74,11 @@ jobs:
           python-version: "3.12"
           cache: pip
 
-      - name: Install dependencies
+      # Store 版に入れるものだけを入れる（mcp は入れない）
+      - name: Install dependencies (GUI only)
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt pyinstaller pytest
-
-      - name: Run tests
-        run: python -m pytest -q
+          pip install -r requirements.txt pyinstaller
 
       # 任意: リポジトリの Secrets に署名証明書を登録していれば、ローカル検証用に署名する
       #   LTL_PFX_BASE64   … .pfx を Base64 にした文字列

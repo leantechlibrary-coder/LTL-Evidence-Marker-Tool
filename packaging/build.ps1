@@ -30,8 +30,18 @@ function Find-SdkTool($name) {
 
 # 1) entry.py を exe にフリーズ
 #    --windowed: GUI 専用のため GUI subsystem（起動時にコンソール窓を出さない）
-& python -m PyInstaller --noconfirm --windowed --name $App (Join-Path $Root "entry.py")
+#    --exclude-module: Store 版には MCP を含めない。entry.py は MCP を import しないが、
+#    ビルド環境に mcp が入っていても絶対に同梱されないよう明示的に除外する。
+& python -m PyInstaller --noconfirm --windowed --name $App `
+    --exclude-module mcp --exclude-module mcp_server (Join-Path $Root "entry.py")
 Assert-ExitCode "PyInstaller"
+
+# 1.5) 歯止め: 同梱モジュール一覧（PYZ の目次）に MCP が入っていないことを確認
+$toc = Join-Path $Root "build\$App\PYZ-00.toc"
+if (-not (Test-Path $toc)) { throw "同梱モジュール一覧が見つかりません: $toc" }
+if (Select-String -Path $toc -Pattern "\('mcp(\.|'|_server')" -Quiet) {
+  throw "exe に MCP 関連モジュールが含まれています（Store 版には入れない方針）"
+}
 
 # 2) MSIX レイアウトを stage に組む（exe一式 + マニフェスト + アセット）
 Remove-Item $Stage -Recurse -Force -ErrorAction SilentlyContinue

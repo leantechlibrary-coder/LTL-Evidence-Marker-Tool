@@ -988,7 +988,7 @@ class EvidenceMarkerWindow(QMainWindow):
         - style="num3"（甲001）：主番号は「甲001」、枝番は「甲001-2」（mints表記）
         - style="gou"（甲第1号証）：主番号は「甲第1号証」、枝番は「甲第1号証の2」
 
-        書式ロジックは stamp_core に集約（GUIとテストで共有）。出力は不変。
+        書式ロジックは stamp_core に集約（GUIとMCPで1コピー）。出力は不変。
         """
         return format_stamp_text(prefix, main, branch, style)
 
@@ -1002,7 +1002,7 @@ class EvidenceMarkerWindow(QMainWindow):
 
         例：(主1, 枝0)→「甲001.pdf」、(主1, 枝2)→「甲001-2.pdf」
 
-        命名ロジックは stamp_core に集約（GUIとテストで共有）。出力は不変。
+        命名ロジックは stamp_core に集約（GUIとMCPで1コピー）。出力は不変。
         """
         return core_make_filename(prefix, main, branch)
 
