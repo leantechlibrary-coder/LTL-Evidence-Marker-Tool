@@ -1,0 +1,116 @@
+# Windows ビルド: テスト → exe 化（PyInstaller）→ MCP 起動確認 → MSIX 化 を GitHub 上で行う
+# 成果物（exe 一式の zip と .msix）は実行結果ページの「Artifacts」からダウンロードできる。
+# v で始まるタグ（例: v1.0.0）を push すると、成果物を添付したリリースの下書きも作る。
+name: windows-build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+    paths:
+      - "*.py"
+      - "requirements.txt"
+      - "fonts/**"
+      - "packaging/**"
+      - "tests/**"
+      - ".github/workflows/windows-build.yml"
+  pull_request:
+    paths:
+      - "*.py"
+      - "requirements.txt"
+      - "fonts/**"
+      - "packaging/**"
+      - "tests/**"
+      - ".github/workflows/windows-build.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      # secrets はステップの if で直接参照できないため、有無だけを環境変数にする
+      HAS_SIGNING_CERT: ${{ secrets.LTL_PFX_BASE64 != '' }}
+    defaults:
+      run:
+        # PowerShell 7（UTF-8 既定）。build.ps1 の日本語を正しく読むため
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller pytest
+
+      - name: Run tests
+        run: python -m pytest -q
+
+      # 任意: リポジトリの Secrets に署名証明書を登録していれば、ローカル検証用に署名する
+      #   LTL_PFX_BASE64   … .pfx を Base64 にした文字列
+      #   LTL_PFX_PASSWORD … .pfx のパスワード
+      # 未登録なら未署名の .msix を作る（ストア提出は Store が署名するので未署名でよい）
+      - name: Restore signing certificate (optional)
+        env:
+          LTL_PFX_BASE64: ${{ secrets.LTL_PFX_BASE64 }}
+        if: env.HAS_SIGNING_CERT == 'true'
+        run: |
+          [IO.File]::WriteAllBytes("packaging\test-cert.pfx", [Convert]::FromBase64String($env:LTL_PFX_BASE64))
+
+      - name: Build exe and MSIX
+        env:
+          LTL_PFX_PASSWORD: ${{ secrets.LTL_PFX_PASSWORD }}
+        run: ./packaging/build.ps1
+
+      - name: Smoke test (MCP mode of built exe)
+        run: python packaging/smoke_mcp.py dist/ltl-stamp/ltl-stamp.exe
+
+      - name: Remove signing certificate
+        if: always()
+        run: Remove-Item packaging\test-cert.pfx -ErrorAction SilentlyContinue
+
+      # MSIX を使わず exe を直接使う人向けの zip（刻印フォントも exe と同階層に同梱）
+      - name: Zip exe folder
+        run: |
+          Copy-Item fonts dist\ltl-stamp\fonts -Recurse -Force
+          Compress-Archive -Path dist\ltl-stamp\* -DestinationPath packaging\out\ltl-stamp-win-x64.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ltl-stamp-windows
+          path: |
+            packaging/out/ltl-stamp.msix
+            packaging/out/ltl-stamp-win-x64.zip
+          if-no-files-found: error
+          retention-days: 30
+
+  release:
+    # タグ push 時のみ: 成果物を添付したリリースの「下書き」を作る（公開は手動）
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ltl-stamp-windows
+          path: out
+      - name: Create draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" out/* \
+            --repo "$GITHUB_REPOSITORY" --draft --generate-notes --title "$GITHUB_REF_NAME"

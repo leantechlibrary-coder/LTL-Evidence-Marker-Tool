@@ -4,7 +4,7 @@
 
   肝は <uap5:Extension Category="windows.appExecutionAlias">。これにより
   実行エイリアス「ltl-stamp.exe」が WindowsApps の PATH に登録され、外部の
-  MCPクライアントが  ltl-stamp --mcp  を stdio 起動できる（GUIはタイル/スタートから起動）。
+  MCPクライアントが  ltl-stamp（引数 mcp オプション）  を stdio 起動できる（GUIはタイル/スタートから起動）。
 
   [TODO] と書いた箇所は Partner Center（ストア予約）で得た値・作成した画像に置換する。
 -->
@@ -15,9 +15,11 @@
   xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
   IgnorableNamespaces="uap uap5 rescap">
 
+  <!-- [TODO] Name: Partner Center の予約名 / Publisher: Partner Center の Publisher ID
+       （XMLではタグの属性の間にコメントを書けないため、ここにまとめて記載） -->
   <Identity
-    Name="LeanTechLibrary.EvidenceMarker"          <!-- [TODO] Partner Center の予約名 -->
-    Publisher="CN=XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"  <!-- [TODO] Partner Center の Publisher ID -->
+    Name="LeanTechLibrary.EvidenceMarker"
+    Publisher="CN=XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
     Version="1.0.0.0"
     ProcessorArchitecture="x64" />
 
@@ -51,7 +53,7 @@
         <uap:DefaultTile Wide310x150Logo="Assets\Wide310x150Logo.png" />
       </uap:VisualElements>
 
-      <!-- ★ これが MCP の口：ltl-stamp --mcp を外部から起動できるようにする -->
+      <!-- ★ これが MCP の口：ltl-stamp（引数 mcp オプション） を外部から起動できるようにする -->
       <Extensions>
         <uap5:Extension Category="windows.appExecutionAlias">
           <uap5:AppExecutionAlias>

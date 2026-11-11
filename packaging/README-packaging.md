@@ -27,6 +27,23 @@ GUI と MCP を1つの MSIX に同梱する。`entry.py` を exe にフリーズ
    - MCP：別プロセスから `ltl-stamp --mcp` が stdio で応答するか（下記クライアント設定で）。
 5. ストア提出：Partner Center にアップロード（Store が署名。`runFullTrust` は審査対象）。
 
+## クラウド（GitHub Actions）でビルドする
+
+Windows PC が無くても、`.github/workflows/windows-build.yml` が GitHub 上の Windows 環境で
+上記の `build.ps1` を実行する。流れ：テスト（pytest）→ exe 化 → **MCP 起動確認**
+（`packaging/smoke_mcp.py`）→ MSIX 化。
+
+- **自動で動くとき**：PR 作成時／`main` への push 時（コード・依存・packaging に変更があるとき）
+- **手動で動かす**：GitHub の Actions タブ →「windows-build」→「Run workflow」
+- **成果物の入手**：実行結果ページ下部の「Artifacts」→ `ltl-stamp-windows`（30日保存）
+  - `ltl-stamp.msix`：ストア提出用（未署名。Store が署名する）
+  - `ltl-stamp-win-x64.zip`：exe 一式（フォント同梱）。MSIX を使わず直接起動・MCP 設定する場合
+- **リリース**：`v1.0.0` のようなタグを push すると、成果物を添付したリリースの**下書き**ができる（公開は手動）
+- **署名（任意）**：リポジトリの Settings → Secrets に `LTL_PFX_BASE64`（.pfx を Base64 化した文字列）と
+  `LTL_PFX_PASSWORD` を登録すると、ローカル検証用に署名した MSIX を作る。未登録なら未署名。
+
+開発中の MCP 起動確認は `python packaging/smoke_mcp.py python entry.py` でもできる。
+
 ## ひとつ注意：コンソール subsystem と stdio
 
 `--mcp` は stdin/stdout で会話するため、フリーズは **`--console`** で行う（GUI subsystem だと

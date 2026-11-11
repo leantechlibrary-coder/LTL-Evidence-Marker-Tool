@@ -6,7 +6,15 @@
 #   - 画像アセット           : packaging\Assets\*.png（StoreLogo/Square150/Square44/Wide310）
 #
 # 使い方:  powershell -ExecutionPolicy Bypass -File packaging\build.ps1
+#   GitHub Actions（.github/workflows/windows-build.yml）からも同じスクリプトを呼ぶ。
+#   環境変数 LTL_PFX_PASSWORD があれば署名パスワードとして使う（無ければ "PASSWORD"）。
 $ErrorActionPreference = "Stop"
+
+# 外部コマンド（python / makeappx / signtool）は失敗しても PowerShell が止まらないため、
+# 終了コードを見て明示的に止める（CI で失敗を見逃さないため）。
+function Assert-ExitCode($what) {
+  if ($LASTEXITCODE -ne 0) { throw "$what が失敗しました（終了コード $LASTEXITCODE）" }
+}
 $App   = "ltl-stamp"
 $Pkg   = Split-Path -Parent $MyInvocation.MyCommand.Path   # packaging\
 $Root  = Split-Path -Parent $Pkg                            # リポジトリ直下
@@ -24,6 +32,7 @@ function Find-SdkTool($name) {
 #    --console: --mcp の stdio を確実に通すためコンソール subsystem。
 #    （GUI起動時のコンソール非表示は entry.py 側で対応する想定。README 参照）
 & python -m PyInstaller --noconfirm --console --name $App (Join-Path $Root "entry.py")
+Assert-ExitCode "PyInstaller"
 
 # 2) MSIX レイアウトを stage に組む（exe一式 + マニフェスト + アセット）
 Remove-Item $Stage -Recurse -Force -ErrorAction SilentlyContinue
@@ -39,13 +48,16 @@ Copy-Item (Join-Path $Root "fonts") (Join-Path $Stage "fonts") -Recurse
 New-Item -ItemType Directory -Force -Path $Out | Out-Null
 $makeappx = Find-SdkTool "makeappx.exe"
 & $makeappx pack /d $Stage /p (Join-Path $Out "$App.msix") /o
+Assert-ExitCode "makeappx"
 
 # 4) 署名（ローカル検証用。ストア提出時は不要＝Storeが再署名）
 #    自己署名証明書の Subject は AppxManifest の Publisher と完全一致が必須。
 $pfx = Join-Path $Pkg "test-cert.pfx"
 if (Test-Path $pfx) {
   $signtool = Find-SdkTool "signtool.exe"
-  & $signtool sign /fd SHA256 /a /f $pfx /p "PASSWORD" (Join-Path $Out "$App.msix")
+  $pfxPass = if ($env:LTL_PFX_PASSWORD) { $env:LTL_PFX_PASSWORD } else { "PASSWORD" }
+  & $signtool sign /fd SHA256 /a /f $pfx /p $pfxPass (Join-Path $Out "$App.msix")
+  Assert-ExitCode "signtool"
   Write-Host "署名済み: $Out\$App.msix（ローカルで Add-AppxPackage で検証可）"
 } else {
   Write-Host "未署名: $Out\$App.msix（test-cert.pfx を置くとローカル検証用に署名します）"
