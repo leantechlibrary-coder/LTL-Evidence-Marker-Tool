@@ -1,4 +1,4 @@
-# Windows ビルド: テスト → exe 化（PyInstaller）→ MCP 起動確認 → MSIX 化 を GitHub 上で行う
+# Windows ビルド: テスト → exe 化（PyInstaller）→ MSIX 化 を GitHub 上で行う
 # 成果物（exe 一式の zip と .msix）は実行結果ページの「Artifacts」からダウンロードできる。
 # v で始まるタグ（例: v1.0.0）を push すると、成果物を添付したリリースの下書きも作る。
 name: windows-build
@@ -73,9 +73,6 @@ jobs:
         env:
           LTL_PFX_PASSWORD: ${{ secrets.LTL_PFX_PASSWORD }}
         run: ./packaging/build.ps1
-
-      - name: Smoke test (MCP mode of built exe)
-        run: python packaging/smoke_mcp.py dist/ltl-stamp/ltl-stamp.exe
 
       - name: Remove signing certificate
         if: always()

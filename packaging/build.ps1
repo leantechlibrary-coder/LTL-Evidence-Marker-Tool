@@ -29,9 +29,8 @@ function Find-SdkTool($name) {
 }
 
 # 1) entry.py を exe にフリーズ
-#    --console: --mcp の stdio を確実に通すためコンソール subsystem。
-#    （GUI起動時のコンソール非表示は entry.py 側で対応する想定。README 参照）
-& python -m PyInstaller --noconfirm --console --name $App (Join-Path $Root "entry.py")
+#    --windowed: GUI 専用のため GUI subsystem（起動時にコンソール窓を出さない）
+& python -m PyInstaller --noconfirm --windowed --name $App (Join-Path $Root "entry.py")
 Assert-ExitCode "PyInstaller"
 
 # 2) MSIX レイアウトを stage に組む（exe一式 + マニフェスト + アセット）
@@ -40,8 +39,8 @@ Copy-Item (Join-Path $Root "dist\$App") $Stage -Recurse
 Copy-Item (Join-Path $Pkg "AppxManifest.xml") (Join-Path $Stage "AppxManifest.xml")
 Copy-Item (Join-Path $Pkg "Assets") (Join-Path $Stage "Assets") -Recurse
 # 刻印用フォント（LTL Evidence Sans + OFL.txt）。exe と同階層の fonts\ に置く
-# （stamp_core._find_font_file の探索順1）。MCP同梱パッケージ（ltl-evidence-mcp）
-# にはフォントを同梱しない＝そちらは内蔵 "japan" へ自動フォールバックする。
+# （stamp_core._find_font_file の探索順1）。フォントが見つからない場合は
+# 内蔵 "japan" フォントへ自動フォールバックする。
 Copy-Item (Join-Path $Root "fonts") (Join-Path $Stage "fonts") -Recurse
 
 # 3) パッケージ化
