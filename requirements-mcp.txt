@@ -1,5 +1,5 @@
 # MCPサーバ（python mcp_server.py）用の依存。GUI は不要なので PyQt6 は入れない。
 # Microsoft Store 版（GUI 専用）には MCP を含めない。そちらは requirements.txt を使う。
-PyMuPDF>=1.24.0      # AGPL v3
+PyMuPDF>=2.1      # AGPL v3
 fonttools>=4.40      # MIT（埋め込みフォントのサブセット化。無くても動作＝フル埋め込み）
 mcp>=1.2.0,<2        # MIT。2.x は FastMCP 廃止のため非互換

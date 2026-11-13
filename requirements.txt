@@ -1,5 +1,5 @@
 # 実行時依存
-PyMuPDF>=1.24.0      # AGPL v3
+PyMuPDF>=2.1      # AGPL v3
 PyQt6>=6.5.0         # GPL v3（GUI）
 # MCPサーバ用の依存は requirements-mcp.txt（Store 版には含めない）
 fonttools>=4.40      # MIT（埋め込みフォントのサブセット化。無くても動作＝フル埋め込み）
