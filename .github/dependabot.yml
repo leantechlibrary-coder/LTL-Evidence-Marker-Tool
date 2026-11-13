@@ -1,0 +1,21 @@
+# Dependabot: 依存パッケージの更新・脆弱性修正のPRを自動で作成する
+version: 2
+updates:
+  # Python 依存（requirements.txt）
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      timezone: "Asia/Tokyo"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+
+  # GitHub Actions のバージョン（workflows 内の uses:）
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    labels:
+      - "dependencies"

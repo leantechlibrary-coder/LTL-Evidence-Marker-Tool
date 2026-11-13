@@ -3,7 +3,7 @@
 観点:
   1. 同梱フォントで刻印した出力PDFに LTL Evidence Sans がサブセット埋め込みされる
   2. 埋め込み後もテキスト抽出が効き、verify_stamp（位置検証）が通る
-  3. フォントファイルが無い環境（MCP同梱パッケージ想定）では "japan" へフォールバックし、
+  3. フォントファイルが無い環境では "japan" へフォールバックし、
      刻印・検証とも従来どおり成立する
   4. サブセット外グリフを含むテキスト（カスタム種別等）もフォールバックで刻印できる
   5. /Rotate 付きページでも埋め込みフォントで位置検証が通る
@@ -54,7 +54,7 @@ def test_embedded_stamp_is_searchable_and_verified(tmp_path):
 
 
 def test_fallback_when_font_absent(tmp_path, monkeypatch):
-    """MCP同梱パッケージ（フォント非同梱）を模す：探索が None → japan で従来動作。"""
+    """フォント非同梱の配布を模す：探索が None → japan で従来動作。"""
     monkeypatch.setattr(st, "_find_font_file", lambda: None)
     st._load_font.cache_clear()
     name, file, font = st.resolve_stamp_font("甲001")

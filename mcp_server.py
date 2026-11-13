@@ -1,6 +1,11 @@
 """
-証拠番号付与ツール — MCPサーバ（内蔵）
-=====================================
+証拠番号付与ツール — MCPサーバ（別入口・任意機能）
+==================================================
+
+起動:  python mcp_server.py        （依存: pip install -r requirements-mcp.txt）
+
+Microsoft Store 版（entry.py → GUI 専用の exe / MSIX）には含めない。entry.py は
+このモジュールを import せず、build.ps1 も明示的に除外する。
 
 GUI（pdf_evidence_marker.py）と同じ決定論コア（stamp_core.py）を共有し、
 証拠番号刻印の決定論部分を MCP ツールとして公開する。サーバはLLMを呼ばず、
@@ -154,7 +159,7 @@ def stamp_execute(folder: str, style: str = "num3",
 
 
 def run():
-    """MCPサーバを stdio で起動する（entry.py --mcp から呼ばれる）。"""
+    """MCPサーバを stdio で起動する。"""
     mcp.run()
 
 

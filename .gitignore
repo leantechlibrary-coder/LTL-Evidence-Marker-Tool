@@ -210,3 +210,8 @@ __marimo__/
 かんたん起動.bat
 はじめにお読みください.txt
 .claude/
+
+# MSIX ビルド生成物・署名証明書（packaging/build.ps1）
+packaging/stage/
+packaging/out/
+*.pfx
