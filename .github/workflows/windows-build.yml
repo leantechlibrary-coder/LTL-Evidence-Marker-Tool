@@ -106,7 +106,7 @@ jobs:
           Copy-Item fonts dist\ltl-stamp\fonts -Recurse -Force
           Compress-Archive -Path dist\ltl-stamp\* -DestinationPath packaging\out\ltl-stamp-win-x64.zip
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ltl-stamp-windows
           path: |
